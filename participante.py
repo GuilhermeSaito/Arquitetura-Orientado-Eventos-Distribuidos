@@ -1,24 +1,22 @@
-# leiloeiro.py
-
 import pika
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization, hashes
 
-# # Gerar chaves privadas e públicas para criptografia
-# private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-# public_key = private_key.public_key()
+# Função para criptografar a mensagem
+def encrypt_message(message):
+    with open("public_key.pem", "rb") as f:
+        public_key_pem = f.read()
+        public_key = serialization.load_pem_public_key(public_key_pem)
 
-# # Função para criptografar a mensagem
-# def encrypt_message(message):
-#     encrypted = public_key.encrypt(
-#         message.encode(),
-#         padding.OAEP(
-#             mgf=padding.MGF1(algorithm=hashes.SHA256()),
-#             algorithm=hashes.SHA256(),
-#             label=None
-#         )
-#     )
-#     return encrypted
+    encrypted = public_key.encrypt(
+        message.encode(),
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    return encrypted
 
 # Setup do RabbitMQ
 def setup_connection():
@@ -34,10 +32,10 @@ def publish_message(exchange_name, message):
     channel.exchange_declare(exchange=exchange_name, exchange_type='fanout')
 
     # Criptografando a mensagem
-    # encrypted_message = encrypt_message(message)
-    encrypted_message = message
+    encrypted_message = encrypt_message(message)
+    # encrypted_message = message
 
-    # Publicando a mensagem criptografada para todos os consumidores
+    # Publicando a mensagem criptografada para todos os consumidores, como o type do exchange eh fanout = broadcast, ignora o routing_key
     channel.basic_publish(exchange=exchange_name, routing_key='', body=encrypted_message)
 
     print(f" [x] Sent (encrypted): {encrypted_message}")
