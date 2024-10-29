@@ -1,21 +1,30 @@
+import json
+import base64  # Para codificar a assinatura em base64
 import pika
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 
-# Função para criptografar a mensagem
-def encrypt_message(message):
-    # Resgatando a chave publica criada pelo leiloeiro
-    with open("public_key.pem", "rb") as f:
-        public_key_pem = f.read()
-        public_key = serialization.load_pem_public_key(public_key_pem)
+# Gerar chaves privadas e públicas para descriptografia
+private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+public_key = private_key.public_key()
 
-    encrypted = public_key.encrypt(
-        message.encode(),
-        padding.OAEP(
+def save_public_key():
+    public_key_pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    with open("public_key.pem", "wb") as f:
+        f.write(public_key_pem)
+
+# Função para assinar a mensagem
+def sign_message(message):
+    encrypted = private_key.sign(
+        message.encode(),  # Convertendo a mensagem em bytes
+        padding.PSS(
             mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
-        )
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
+        hashes.SHA256()
     )
     return encrypted
 
@@ -26,24 +35,30 @@ def setup_connection():
     return connection, channel
 
 # Publicar mensagens do leiloeiro
-def publish_message(exchange_name, message):
+def publish_message(exchange_name, message, routing_key):
     connection, channel = setup_connection()
 
     # Declarando a exchange
-    channel.exchange_declare(exchange=exchange_name, exchange_type='fanout')
+    channel.exchange_declare(exchange=exchange_name, exchange_type='direct')
 
-    # Criptografando a mensagem
-    encrypted_message = encrypt_message(message)
-    # encrypted_message = message
+    # Assinando a mensagem
+    signed_message = sign_message(message)
 
-    # Publicando a mensagem criptografada para todos os consumidores, como o type do exchange eh fanout = broadcast, ignora o routing_key
-    channel.basic_publish(exchange=exchange_name, routing_key='', body=encrypted_message)
+    # Criando um objeto JSON contendo a mensagem original e a assinatura em base64
+    message_payload = json.dumps({
+        "original_message": message,
+        "signed_message": base64.b64encode(signed_message).decode('utf-8')
+    })
 
-    print(f" [x] Sent (encrypted): {encrypted_message}")
+    # Publicando a mensagem JSON
+    channel.basic_publish(exchange=exchange_name, routing_key=routing_key, body=message_payload)
+
+    print(f" [x] Sent (encrypted): {message_payload}")
     connection.close()
 
+
 if __name__ == "__main__":
-    exchange = 'leilao_eventos'
+    exchange = 'leilao_eventos_direct'
 
     choice = 1
 
@@ -54,27 +69,26 @@ if __name__ == "__main__":
             name = input("Informe seu nome: ")
             lote = input("Insira o numero do lote: ")
 
+            # Gera a chave publica para todos
+            save_public_key()
+
         if choice == 1:
             valor = input("Insira o valor desejado para o lance: ")
-
-            publish_message(exchange, f"Novo lance de {valor} para o item {lote} da pessoa {name}")
+            routing_key = 'novo_lance'
+            publish_message(exchange, f"Novo lance de {valor} para o item {lote} da pessoa {name}", routing_key)
 
         elif choice == 2:
             valor = input("Insira o valor desejado para atualizar o lance: ")
-
-            publish_message(exchange, f"Atualizar lance de {valor} para o item {lote} da pessoa {name}")
+            routing_key = 'atualizar_lance'
+            publish_message(exchange, f"Atualizar lance de {valor} para o item {lote} da pessoa {name}", routing_key)
 
         elif choice == 3:
-            publish_message(exchange, f"Retirar lance do item {lote} da pessoa {name}")
+            routing_key = 'retirar_lance'
+            publish_message(exchange, f"Retirar lance do item {lote} da pessoa {name}", routing_key)
 
         elif choice == 4:
-            publish_message(exchange, f"Verificar lance do item {lote}")
+            routing_key = 'verificar_lance'
+            publish_message(exchange, f"Verificar lance do item {lote}", routing_key)
 
         else:
             break
-
-
-    # Exemplo de eventos
-    # publish_message(exchange, 'Novo lance de 1000 para o item #123')
-    # publish_message(exchange, 'Atualização: Lance de 1500 para o item #123')
-    # publish_message(exchange, 'Leilão encerrado para o item #123')
