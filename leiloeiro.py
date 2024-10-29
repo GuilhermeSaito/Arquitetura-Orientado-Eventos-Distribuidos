@@ -53,7 +53,6 @@ def subscribe_to_updates(exchange_name):
         # Descriptografando a mensagem
         decrypted_message = decrypt_message(body)
         print(f" [x] Received and decrypted: {decrypted_message}")
-        # print(f" [x] Received and decrypted: {body}")
 
     # Consumir mensagens
     channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
