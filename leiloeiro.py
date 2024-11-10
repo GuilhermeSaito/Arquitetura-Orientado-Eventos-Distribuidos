@@ -7,14 +7,26 @@ from cryptography.hazmat.primitives import serialization, hashes
 
 # Função para verificar a assinatura da mensagem
 def verify_message(original_message, signed_message):
+    return_message = ""
     # Resgatando a chave pública criada pelo leiloeiro
-    with open("public_key.pem", "rb") as f:
-        public_key_pem = f.read()
-        public_key = serialization.load_pem_public_key(public_key_pem)
-
-    # Verificando a assinatura
     try:
-        public_key.verify(
+        with open("public_key_participante1.pem", "rb") as f:
+            public_key_pem = f.read()
+            public_key_participante1 = serialization.load_pem_public_key(public_key_pem)
+    except Exception as e:
+        print("Nao encontrado chave partiripante 1")
+        
+    try:
+        with open("public_key_participante2.pem", "rb") as f:
+            public_key_pem = f.read()
+            public_key_participante2 = serialization.load_pem_public_key(public_key_pem)
+    except Exception as e:
+        print("Nao encontrado chave partiripante 2")
+    
+
+    # Verificando a assinatura do participante 1
+    try:
+        public_key_participante1.verify(
             signed_message,
             original_message.encode(),
             padding.PSS(
@@ -25,7 +37,24 @@ def verify_message(original_message, signed_message):
         )
         return "Mensagem verificada com sucesso."
     except Exception as e:
-        return f"Falha na verificação da mensagem: {e}"
+        return_message =  f"Falha na verificação da mensagem: {e}"
+
+    # Verificando a assinatura do participante 2
+    try:
+        public_key_participante2.verify(
+            signed_message,
+            original_message.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+        return "Mensagem verificada com sucesso."
+    except Exception as e:
+        return_message =  f"Falha na verificação da mensagem: {e}"
+
+    return return_message
 
 # Setup do RabbitMQ
 def setup_connection():

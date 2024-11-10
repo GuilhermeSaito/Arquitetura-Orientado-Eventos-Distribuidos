@@ -4,17 +4,19 @@ import pika
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 import threading  # Para criar a thread
+import tempfile
+import os
 
 # Gerar chaves privadas e públicas para descriptografia
 private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 public_key = private_key.public_key()
 
-def save_public_key():
+def save_public_key(public_key_name):
     public_key_pem = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
-    with open("public_key.pem", "wb") as f:
+    with open(public_key_name, "wb") as f:
         f.write(public_key_pem)
 
 # Função para assinar a mensagem
@@ -116,9 +118,8 @@ def listen_confirmation():
 
     channel.start_consuming()
 
-if __name__ == "__main__":
+def choices(public_key_name):
     exchange = 'leilao_eventos_direct'
-
     choice = 1
 
     while choice != 0:
@@ -129,7 +130,7 @@ if __name__ == "__main__":
             lote = input("Insira o numero do lote: ")
 
             # Gera a chave publica para todos
-            save_public_key()
+            save_public_key(public_key_name)
 
         if choice == 1:
             valor = input("Insira o valor desejado para o lance: ")
@@ -162,3 +163,24 @@ if __name__ == "__main__":
 
         else:
             break
+
+if __name__ == "__main__":
+    try:
+        with open("segundo.txt", "r") as file:
+            participante = file.read().strip()  # Remove espaços em branco ao redor
+    except FileNotFoundError:
+        print("O arquivo 'segundo.txt' não foi encontrado.")
+        participante = ""
+
+    if not os.path.exists(participante):
+        print("Nao achou o temp file")
+        with tempfile.NamedTemporaryFile() as temp_file:
+            with open("segundo.txt", "w") as file:
+                print(f"Vai escrever o path do temp file {temp_file.name}")
+                file.write(temp_file.name)
+            
+            choices("public_key_participante1.pem")
+    else:
+        print("Achou o temp file")
+        choices("public_key_participante2.pem")
+    
